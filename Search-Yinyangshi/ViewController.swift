@@ -11,9 +11,11 @@ import UIKit
 class ViewController: UITableViewController {
     @IBOutlet weak var searchBar: UISearchBar!
     let heightCell = UITableViewCell.init(style: .default, reuseIdentifier: "UITableViewCell")
-    var source = [String]() {
+    var source = [NSAttributedString]() {
         didSet {
-            tableView.reloadData()
+            if oldValue != source {
+                tableView.reloadData()
+            }
         }
     }
     
@@ -35,7 +37,7 @@ class ViewController: UITableViewController {
                 infos.append((show: show, key: key))
             }
         } catch {
-            source.append("\(error)")
+            source.append(NSAttributedString(string: "\(error)", attributes: [NSForegroundColorAttributeName: UIColor.red]))
         }
         
         searchBar.delegate?.searchBar?(searchBar, textDidChange: "")
@@ -54,16 +56,15 @@ class ViewController: UITableViewController {
 extension ViewController: UISearchBarDelegate {
 
     func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
-        source.removeAll()
-        
         DispatchQueue(label: "search").async { [weak self] in
             if let strongSelf = self {
-                var source = [String]()
+                var source = [NSAttributedString]()
+                let searchText = searchText.replacingOccurrences(of: " ", with: "")
                 
                 func search(_ text: String) {
                     for info in strongSelf.infos {
                         if info.key.contains(text) {
-                            source.append(info.show)
+                            source.append(info.show.format(searchText, attribut: [NSForegroundColorAttributeName: UIColor.blue]))
                         }
                     }
                 }
@@ -106,7 +107,7 @@ extension ViewController {
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.cellForRow(at: indexPath)?.setSelected(false, animated: true)
         
-        if let string = source[indexPath.row].substring(fromStr: "--> ") {
+        if let string = source[indexPath.row].string.substring(fromStr: "--> ") {
             searchBar.text = string
             searchBar.delegate?.searchBar?(searchBar, textDidChange: searchBar.text ?? "")
         }
@@ -114,7 +115,8 @@ extension ViewController {
     
     func fill(_ cell: UITableViewCell, indexPath: IndexPath) {
         cell.frame = tableView.bounds
-        cell.textLabel?.text = source[indexPath.row]
+        cell.textLabel?.textColor = UIColor.gray
+        cell.textLabel?.attributedText = source[indexPath.row]
         cell.textLabel?.numberOfLines = 0
         cell.sizeToFit()
     }
@@ -126,5 +128,25 @@ extension String {
             return substring(from: range.upperBound)
         }
         return nil
+    }
+    
+    func format(_ string: String, attribut: [String: Any]) -> NSAttributedString {
+        let attr = NSMutableAttributedString(string: self)
+
+        let nsstring = attr.string as NSString
+        
+        let pattern = "\(string)"
+        let regular = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+        if let regular = regular {
+            let results = regular.matches(in: nsstring as String, options: .reportProgress, range: NSRange.init(location: 0, length: attr.string.characters.count))
+            for result in results {
+                let rang = result.range
+                if rang.location >= 0, rang.location + rang.length <= nsstring.length {
+                    attr.addAttributes(attribut, range: rang)
+                }
+            }
+        }
+
+        return attr
     }
 }
